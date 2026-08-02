@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: genealogyai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+pysqlite:////data/genealogyai.db
+      - DEBUG=false
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Dades sensibles / locals: no es pugen mai a GitHub
+data/
+_data/
+*.db
+*.sqlite
+*.ged
