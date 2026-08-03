@@ -8,12 +8,19 @@ from __future__ import annotations
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
+from app.domain.interfaces import FamilyRepositoryInterface
+from app.domain.interfaces import PersonRepositoryInterface
+from app.domain.interfaces import PlaceRepositoryInterface
 from app.models import Event, Family, ParentChild, Person, Place
 from app.repositories.base import BaseRepository
 
 
-class PersonRepository(BaseRepository[Person]):
-    """Repositori de dades per a `Person`."""
+class PersonRepository(BaseRepository[Person], PersonRepositoryInterface):
+    """Repositori de dades per a `Person`.
+
+    Implementa la interfície de domínio `PersonRepositoryInterface` i
+    treballa sobre la sessió SQLAlchemy (`BaseRepository`).
+    """
 
     model = Person
 
@@ -63,8 +70,11 @@ class PersonRepository(BaseRepository[Person]):
         return self.session.scalar(select(func.count(Person.id))) or 0
 
 
-class FamilyRepository(BaseRepository[Family]):
-    """Repositori de dades per a `Family`."""
+class FamilyRepository(BaseRepository[Family], FamilyRepositoryInterface):
+    """Repositori de dades per a `Family`.
+
+    Implementa la interfície de domínio `FamilyRepositoryInterface`.
+    """
 
     model = Family
 
@@ -101,8 +111,11 @@ class FamilyRepository(BaseRepository[Family]):
         return self.session.scalar(select(func.count(Family.id))) or 0
 
 
-class PlaceRepository(BaseRepository[Place]):
-    """Repositori de dades per a `Place`."""
+class PlaceRepository(BaseRepository[Place], PlaceRepositoryInterface):
+    """Repositori de dades per a `Place`.
+
+    Implementa la interfície de domínio `PlaceRepositoryInterface`.
+    """
 
     model = Place
 

@@ -34,9 +34,16 @@ class AuditLog(UUIDMixin, TimestampMixin, Base):
     action: Mapped[str] = mapped_column(
         String(50), comment="create | update | delete | import | ..."
     )
+    reason: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        comment="GEDCOM_IMPORT | MANUAL_EDIT | MERGE | AI_SUGGESTION | NORMALIZATION",
+    )
     user: Mapped[Optional[str]] = mapped_column(String(255))
     payload_json: Mapped[Optional[str]] = mapped_column(
         Text, comment="Canvis o metadades de l'accio (JSON serialitzat)"
+    )
+    metadata_json: Mapped[Optional[str]] = mapped_column(
+        Text, comment="Informacio adicional de l'acció (JSON serialitzat)"
     )
 
     def __repr__(self) -> str:
