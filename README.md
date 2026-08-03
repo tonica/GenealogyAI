@@ -8,7 +8,11 @@ motores de busqueda genealogica en fases posteriores.
 > **Estado actual**: backend funcional con parser GEDCOM propio, importador con
 > normalizacion de fechas/lugares/apellidos, deteccion de errores y
 > estadisticas, API REST endurecida (repositorios, pipeline de import, FTS5,
-> UUID, audit log, PRAGMAs SQLite) y **64 tests**. El frontend React se
+> UUID, audit log, PRAGMAs SQLite), **arquitectura hexagonal** (capa de dominio
+> independiente de la persistencia con entities, value objects y services),
+> **Data Quality Engine** (informe de calidad, deteccion de duplicados por
+> reglas, score de calidad por factores, estadisticas avanzadas, sugerencias de
+> investigacion) y **237 tests** con cobertura del 94%. El frontend React se
 > implementara en una fase posterior.
 
 ---
@@ -23,25 +27,40 @@ Client HTTP (test/curl)
 │            app/api            │  Routers FastAPI (endpoints REST)
 │  persons · families · places  │
 │  trees · import · health      │
+│  quality · duplicates ·       │
+│  statistics · research/tasks  │
 └──────────────┬────────────────┘
                │ schemas (Pydantic)
                ▼
 ┌───────────────────────────────┐
-│        app/repositories        │  Capa de datos: Person/Family/PlaceRepo
-│   BaseRepository (genérico)   │  (API → repository → SQLAlchemy)
+│     app/application           │  Use cases (UnitOfWork, DomainLoader)
+│  GetPerson · ImportGedcom ·   │  Qualitat · Duplicats · Estadístiques
+│  MergePersons · ...           │
+└──────────────┬────────────────┘
+               ▼
+┌───────────────────────────────┐
+│      app/domain (hexagonal)   │  Lógica de negocio PURA (sin I/O)
+│  entities · value_objects ·   │  DateEngine · DuplicateRules ·
+│  services · interfaces        │  QualityEngine · StatisticsEngine ·
+│                               │  PlaceResolver · NameResolver ·
+│                               │  DataQualityReport · ResearchTasks
+└──────────────┬────────────────┘
+               ▼
+┌───────────────────────────────┐
+│     app/repositories          │  Capa de datos: Person/Family/PlaceRepo
+│   BaseRepository (genérico)   │  implementa las interfaces de dominio
 └──────────────┬────────────────┘
                ▼
 ┌───────────────────────────────┐
 │            SQLAlchemy          │  app/models (ORM) + app/db
 │  person_fts · PRAGMAs · UUID   │
 └───────────────────────────────┘
-                                     Servicios auxiliares:
-┌────────────────────────────┐       ┌─────────────────────────────┐
-│ app/services/import_pipeline │       │  app/services/search.py     │
-│ Validator→Normalizer→        │       │  soundex · metaphone ·       │
-│ Resolver→Importer (etapas)   │       │  SearchIndexer (FTS5)        │
-└────────────────────────────┘       └─────────────────────────────┘
 ```
+
+**Dirección de dependencias**: `API → Application → Domain ← Repositories ←
+Infrastructure`. El dominio no conoce SQLAlchemy ni FastAPI; la persistencia
+implementa las interfaces (`PersonRepositoryInterface`, ...) y la capa de
+aplicación orquesta repositorios + motores de dominio (ver `DomainLoader`).
 
 ### Flujo de una importación
 
@@ -53,9 +72,37 @@ GEDCOM → validator (errores, coherencia)
         → pipeline (commit + opcional "rebuild" del índice FTS5)
 ```
 
----
+### Data Quality Engine (Sprint 1.6)
 
-## Stack
+Capa de **inteligencia genealógica** construida sobre el dominio. Solo analiza
+datos (lectura), nunca los modifica.
+
+| Motor | Responsabilidad |
+| ----- | --------------- |
+| `DateEngine` + `DateValue` | Parsea fechas GEDCOM (`1880`, `JAN 1880`, `ABT`, `BEF`, `AFT`, `BET X AND Y`, `FROM X TO Y`, `EST`, `CAL`, `INT`, ISO) y soporta intervalos, comparación, contención y solapamiento. |
+| `DuplicateDetector` + rules | Reglas configurables (`NameRule`, `BirthRule`, `DeathRule`, `ParentsRule`, `MarriageRule`, `ChildrenRule`, `PlaceRule`) que puntúan posibles duplicados (umbral 0.55 por defecto). |
+| `QualityEngine` | Score 0..1 por persona desglosado en factores explicables (nombre, sexo, nacimiento, defunción, padres, hijos, fuentes, eventos, lugares, cronología). |
+| `StatisticsEngine` | Agregados: sexo, edades medias, nacimientos/defunciones por año, top lugares/cognomes, ramas más grandes, personas sin datos. |
+| `PlaceResolver` / `NameResolver` | Detectan variantes de topónimos (`Cataluña`/`Cataluna`) y de nombres (`Maria`/`María`, `Jose`/`José`/`Josep`). |
+| `DataQualityReportGenerator` | Informe completo de observaciones (errores, warnings, infos) exportable a JSON y Markdown. |
+| `ResearchTaskGenerator` | Sugiere investigaciones (bautismo, matrimonio, defunción, padres, revisar duplicado) según las carencias. |
+
+La capa de aplicación (`app/application/domain_loader.py`) carga las entidades
+de dominio desde los repositorios (enriqueciendo fechas vitales desde los
+eventos y las relaciones familiares) y los use cases de `quality.py` orquestan
+los motores para los endpoints.
+
+**Endpoints nuevos** (todos de solo lectura):
+
+| Método | Ruta | Descripción |
+| ------ | ---- | ----------- |
+| GET | `/api/quality/report?format=json\|markdown` | Informe completo de calidad de datos. |
+| GET | `/api/quality/person/{id}` | Score de calidad individual con factores. |
+| GET | `/api/duplicates?limit=N` | Candidatos a personas duplicadas ordenados por puntuación. |
+| GET | `/api/statistics` | Estadísticas agregadas del conjunto. |
+| GET | `/api/research/tasks?limit=N` | Tareas de investigación sugeridas. |
+
+---
 
 ## Stack
 
@@ -120,8 +167,9 @@ alembic upgrade head
 ```bash
 cd backend
 pytest
+pytest --cov=app            # cobertura (objetivo >= 90 %)
 ruff check app tests
-black app tests
+black --check app tests
 ```
 
 ---
@@ -216,6 +264,14 @@ black app tests
   pattern, pipeline de import en etapas, FTS5 + Soundex/Metaphone, UUID en las
   entidades, AuditLog, PRAGMAs SQLite, config tipada central, logging
   estructurado y cobertura de tests (64).
+- **Fase 3.6 (hecha — capa de dominio / hexagonal)**: entities, value objects,
+  services e interfaces de dominio; mappers ORM<->dominio; UnitOfWork y use
+  cases de aplicación (GetPerson, ImportGedcom, MergePersons); repositorios
+  implementando las interfaces de dominio.
+- **Fase 3.7 (hecha — Data Quality & Genealogical Intelligence)**: DateEngine,
+  DuplicateDetector por reglas, QualityEngine, StatisticsEngine avanzado,
+  resolvers de lugares/nombres, DataQualityReport, ResearchTaskGenerator y
+  5 endpoints de calidad (237 tests, cobertura 94 %).
 - **Fase 4:** frontend React (Vite) consumidor de la API.
 - **Fase 5:** IA y motores de busqueda genealogica (usa FTS5 + fonetica).
 

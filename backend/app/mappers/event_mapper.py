@@ -16,14 +16,27 @@ class EventMapper:
 
     @staticmethod
     def to_domain(orm: "ORMEvent") -> DomainEvent:
+        dv: DateValue
+        if orm.date_iso:
+            dv = DateValue.from_iso(orm.date_iso)
+            dv = DateValue(
+                original_text=orm.date_text or orm.date_iso,
+                iso=dv.iso,
+                year=dv.year,
+                month=dv.month,
+                day=dv.day,
+                precision=dv.precision,
+                normalized_start=dv.normalized_start,
+                normalized_end=dv.normalized_end,
+            )
+        else:
+            dv = DateValue(original_text=orm.date_text, year=orm.date_year)
         return DomainEvent(
             id=orm.id,
             uuid=orm.uuid,
             event_type=orm.event_type,
             date_text=orm.date_text,
-            date_value=DateValue(
-                original=orm.date_text, iso=orm.date_iso, year=orm.date_year
-            ),
+            date_value=dv,
             date_iso=orm.date_iso,
             date_year=orm.date_year,
             description=orm.description,
