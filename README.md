@@ -7,12 +7,55 @@ motores de busqueda genealogica en fases posteriores.
 
 > **Estado actual**: backend funcional con parser GEDCOM propio, importador con
 > normalizacion de fechas/lugares/apellidos, deteccion de errores y
-> estadisticas, API REST y 51 tests. El frontend React se implementara en una
-> fase posterior.
+> estadisticas, API REST endurecida (repositorios, pipeline de import, FTS5,
+> UUID, audit log, PRAGMAs SQLite) y **64 tests**. El frontend React se
+> implementara en una fase posterior.
 
 ---
 
+## Arquitectura
+
+```
+Client HTTP (test/curl)
+        │
+        ▼
+┌───────────────────────────────┐
+│            app/api            │  Routers FastAPI (endpoints REST)
+│  persons · families · places  │
+│  trees · import · health      │
+└──────────────┬────────────────┘
+               │ schemas (Pydantic)
+               ▼
+┌───────────────────────────────┐
+│        app/repositories        │  Capa de datos: Person/Family/PlaceRepo
+│   BaseRepository (genérico)   │  (API → repository → SQLAlchemy)
+└──────────────┬────────────────┘
+               ▼
+┌───────────────────────────────┐
+│            SQLAlchemy          │  app/models (ORM) + app/db
+│  person_fts · PRAGMAs · UUID   │
+└───────────────────────────────┘
+                                     Servicios auxiliares:
+┌────────────────────────────┐       ┌─────────────────────────────┐
+│ app/services/import_pipeline │       │  app/services/search.py     │
+│ Validator→Normalizer→        │       │  soundex · metaphone ·       │
+│ Resolver→Importer (etapas)   │       │  SearchIndexer (FTS5)        │
+└────────────────────────────┘       └─────────────────────────────┘
+```
+
+### Flujo de una importación
+
+```
+GEDCOM → validator (errores, coherencia)
+        → normalizer (fechas, lugares, apellidos, slug/soundex)
+        → resolver (dedupe de lugares/personas, refs cruzadas)
+        → importer (persiste a SQLite)
+        → pipeline (commit + opcional "rebuild" del índice FTS5)
+```
+
 ---
+
+## Stack
 
 ## Stack
 
@@ -87,57 +130,77 @@ black app tests
 
 1. **Separacion en capas dentro de `app/`**
    - `api/`: routers FastAPI (capa de presentacion HTTP).
-   - `core/`: configuracion y utilidades transversales.
+   - `core/`: configuracion y utilidades transversales (config, logging).
    - `db/`: engine, sesiones, Base declarativa y punto central de modelos.
    - `models/`: modelos ORM (SQLAlchemy 2.0, estilo `Mapped`/`mapped_column`).
+   - `repositories/`: capa de acceso a datos (repositorios genéricos y por recurso).
    - `schemas/`: schemas Pydantic v2 (validacion y serializacion).
-   - `services/`: logica de negocio desacoplada del HTTP.
+   - `services/`: logica de negocio desacoplada del HTTP (import pipeline, search).
    - `importer/`: parser de GEDCOM, separado para poder testearlo en aislamiento.
    - `utils/`: helpers reutilizables.
-   - `main.py`: punto de entrada del conentainer FastAPI.
+   - `main.py`: punto de entrada del contenedor FastAPI.
 
 2. **Configuracion tipada con `pydantic-settings`** (`core/config.py`)
-   Una sola clase `Settings` con valores por defecto sanos y `lru_cache` para
-   instanciarla una unica vez. Sobreescribible por variables de entorno (clave
-   para Docker) y por un `.env` local.
+   Una unica clase `Settings` con sub-settings `database`, `logging`, `import_`,
+   `search` y `ai`. Delimitador de anidamiento `__` para variables de entorno
+   (p. ej. `DATABASE__URL`), con fallback a la `DATABASE_URL` plana para Docker.
 
-3. **Conexion SQLite reutilizada**
-   En `db/session.py` el motor se crea una vez en el arranque del modulo.
-   `check_same_thread=False` permite que el engine sea compartido entre los
-   hilos de FastAPI sin bloqueos (requisito de SQLite). `SessionLocal` es un
-   `sessionmaker` que se configura con `autoflush=False` y
-   `expire_on_commit=False` para que los objetos sigan siendo legibles tras el
-   commit.
+3. **Repository pattern** (`repositories/`)
+   El API depende de repositorios (`BaseRepository` generico + `PersonRepository`,
+   `FamilyRepository`, `PlaceRepository`), no de la sesion directamente.
+   Facilita el testeo y centraliza las consultas y eager-loads.
 
-4. **Dependencia de sesion por request** (`get_db`)
-   Se provee un `generator` que abre/commitea/cierra una sesion por request;
-   el cierre se garantiza con `finally`. Este es el patron canonico FastAPI
-   para depender de la base de datos.
+4. **Conexion SQLite endurecida** (`db/session.py`)
+   Se aplican PRAGMAs por conexion (via `event.listens_for`) para un SQLite
+   robusto: `journal_mode=WAL`, `foreign_keys=ON`, `synchronous=NORMAL`,
+   `cache_size`, `temp_store=MEMORY` y `busy_timeout`.
+   `check_same_thread=False` permite compartir el engine entre hilos de FastAPI.
+   `SessionLocal` usa `autoflush=False` y `expire_on_commit=False`.
 
-5. **Base declarativa unica** (`Base`)
-   Todos los modelos heredaran de una unica `DeclarativeBase` para que
-   SQLAlchemy y Alembic las numeren de forma coherente.
+5. **Dependencia de sesion por request** (`get_db`)
+   Generator que abre/commitea/cierra una sesion por request; el cierre se
+   garantiza con `finally`. Patron canonico FastAPI.
 
-6. **Endpoints minimos**
-   `GET /api/health` y `GET /` verifican config, CORS, routing y contenedor;
-   la API amplia CRUD con `/api/persons`, `/api/families`, `/api/places`,
-   `/api/tree/{id}` y `POST /api/import`.
+6. **UUID en las entidades** (`models/mixins.py`)
+   Mixin `UUIDMixin` aporta `uuid` (String(36)) único a Person, Family, Place,
+   Event, Source, Media, Suggestion y AuditLog, ademas del id autoincremental.
 
-7. **Docker + Compose**
-   - Imagen base `python:3.12-slim`.
-   - Las dependencias se instalan antes de copiar el codigo (cache de capas).
-   - Compose monta `./data:/data` y fija `DATABASE_URL` con pysqlite a esa
-     ruta, de modo que la DB persiste entre reinicios.
+7. **Audit log** (`models/audit_log.py`)
+   Entidad `AuditLog` para registrar acciones sobre entidades (tipo, id, accion,
+   usuario, payload JSON) con base para trazabilidad futura.
 
-8. **Alembic preparado**
-   `alembic/env.py` importa `get_settings()` y los modelos; sobreescribe
-   `sqlalchemy.url` con el valor de config para que las migraciones usen
-   exactamente la misma conexion que la app.
+8. **Busqueda full-text (FTS5)** (`services/search.py`)
+   `SearchIndexer` crea una tabla virtual `person_fts` (external content sobre
+   `persons`) y expone `search()` y `rebuild()`. Los algoritmos `soundex` y
+   `metaphone` preparan la futura busqueda fonetica.
 
-9. **Testing listo para la fase 2**
-   `tests/conftest.py` hace `samename` para resolver `app.*` y dos fixtures:
-   `client` (TestClient) y `test_session` (SQLite en memoria) para los tests
-   de logica de negocio que vendran.
+9. **Pipeline de import en etapas** (`services/import_pipeline/`)
+   `Validator` -> `Normalizer` -> `Resolver` -> `Importer`, orquestados por
+   `ImportPipeline`; devuelve un `ImportResult` con estadisticas y tiempo.
+
+10. **Registro estructurado** (`core/logging.py`)
+    `setup_logging()` configura handlers y formato (JSON opcional);
+    `get_logger(name)` devuelve loggers `genealogyai.*`. No se usa `print()`.
+
+11. **Endpoints minimos**
+    `GET /api/health` y `GET /` verifican config, CORS, routing y contenedor;
+    la API amplia CRUD con `/api/persons`, `/api/families`, `/api/places`,
+    `/api/tree/{id}` y `POST /api/import`.
+
+12. **Docker + Compose**
+    - Imagen base `python:3.12-slim`.
+    - Las dependencias se instalan antes de copiar el codigo (cache de capas).
+    - Compose monta `./data:/data` y fija `DATABASE_URL` a esa ruta.
+
+13. **Alembic preparado**
+    `alembic/env.py` importa `get_settings()` y los modelos; sobreescribe
+    `sqlalchemy.url` con el valor de config para que las migraciones usen
+    exactamente la misma conexion que la app.
+
+14. **Testing listo para la fase 2**
+    `tests/conftest.py` hace `samename` para resolver `app.*` y fixtures
+    `client`, `test_session` y `sqlite_session` (SQLite en memoria) para los
+    tests de logica, API, FTS, UUID y PRAGMAs.
 
 ---
 
@@ -149,8 +212,12 @@ black app tests
 - **Fase 2 (hecha)**: schemas Pydantic + CRUD por recursos.
 - **Fase 3 (hecha)**: importador GEDCOM 5.5.1 -> SQLite con normalizacion,
   validacion de coherencia (referencias, fechas, duplicados) y estadisticas.
+- **Fase 3.5 (hecha — hardening)**: arquitectura endurecida con repository
+  pattern, pipeline de import en etapas, FTS5 + Soundex/Metaphone, UUID en las
+  entidades, AuditLog, PRAGMAs SQLite, config tipada central, logging
+  estructurado y cobertura de tests (64).
 - **Fase 4:** frontend React (Vite) consumidor de la API.
-- **Fase 5:** IA y motores de busqueda genealogica.
+- **Fase 5:** IA y motores de busqueda genealogica (usa FTS5 + fonetica).
 
 ## Licencia
 Proyecto privado de fines formativos. Sin licencia publica asignada.

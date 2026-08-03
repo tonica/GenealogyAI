@@ -27,10 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.logging import get_logger, log_import_summary, setup_logging
 from app.importer import GedcomParseError, parse
 from app.services.importer import import_gedcom
 
 EXPECTED = {"persons": 330, "families": 100}
+
+logger = get_logger("scripts.import_real_gedcom")
 
 
 def build_report(result, issues) -> str:
@@ -105,6 +108,7 @@ def build_report(result, issues) -> str:
 
 
 def main() -> int:
+    setup_logging()
     p = argparse.ArgumentParser(description="Importa el GEDCOM real de MyHeritage.")
     p.add_argument("ged", type=str, help="Path del fitxer .ged")
     p.add_argument(
@@ -116,31 +120,34 @@ def main() -> int:
 
     source = Path(args.ged)
     if not source.exists():
-        print(f"No existeix: {source}", file=sys.stderr)
+        logger.error("no existeix el fitxer: %s", source)
         return 2
 
-    print(f"[1/4] Parsejant (sols lectura): {source}")
+    logger.info("[1/4] Parsejant (sols lectura): %s", source)
     try:
         doc = parse(source)
     except GedcomParseError as exc:
-        print(f"Error de parse: {exc}", file=sys.stderr)
+        logger.error("error de parse: %s", exc)
         return 1
 
     from app.services.stats import detect_errors
 
     issues = detect_errors(doc)
-    print(
-        f"  Parse OK: {len(doc.persons)} persones, {len(doc.families)} famílies, "
-        f"{len(doc.sources)} fonts, {len(doc.media)} mitjans, {len(issues)} problemes."
+    logger.info(
+        "parse ok: %s persones, %s famílies, %s fonts, %s mitjans, %s problemes",
+        len(doc.persons),
+        len(doc.families),
+        len(doc.sources),
+        len(doc.media),
+        len(issues),
     )
 
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     db_path = out_dir / "genealogyai_real.db"
-    # Esborra DB anterior per net persisCOM (destí SEPARAT del fitxer original).
     db_path.unlink(missing_ok=True)
 
-    print(f"[2/4] Persistint a SQLite independent: {db_path}")
+    logger.info("[2/4] Persistint a SQLite independent: %s", db_path)
     engine = create_engine(
         f"sqlite+pysqlite:///{db_path}", connect_args={"check_same_thread": False}
     )
@@ -153,14 +160,21 @@ def main() -> int:
     with SessionLocal() as session:
         result = import_gedcom(session, doc)
         session.commit()
-
-    print(
-        f"  Importat: {result.persons} persones, {result.families} famílies, "
-        f"{result.sources} fonts, {result.media} mitjans, "
-        f"{result.places} llocs, {result.events} events."
+    log_import_summary(
+        logger,
+        {
+            "persons": result.persons,
+            "families": result.families,
+            "sources": result.sources,
+            "media": result.media,
+            "places": result.places,
+            "events": result.events,
+            "issues": len(issues),
+            "time_ms": getattr(result, "elapsed_ms", 0) or 0,
+        },
     )
 
-    print("[3/4] Verificació de comptes")
+    logger.info("[3/4] Verificació de comptes")
     rows = [
         ("Persones", result.persons, EXPECTED["persons"]),
         ("Famílies", result.families, EXPECTED["families"]),
@@ -169,17 +183,17 @@ def main() -> int:
     for label, got, want in rows:
         mark = "OK" if got == want else "FAIL"
         ok = ok and got == want
-        print(f"  {label}: {got}  (esperat {want})  [{mark}]")
-    print(f"  Resultat vital: {'SUCCESS' if ok else 'FAIL'}")
+        logger.info("  %s: %s (esperat %s) [%s]", label, got, want, mark)
+    logger.info("  Resultat vital: %s", "SUCCESS" if ok else "FAIL")
 
-    print(f"[4/4] Problemes de coherència: {len(issues)}")
+    logger.info("[4/4] Problemes de coherència: %s", len(issues))
     for iss in issues:
-        print(f"  [{iss.level}] {iss.code} {iss.xref}: {iss.message}")
+        logger.info("  [%s] %s %s: %s", iss.level, iss.code, iss.xref, iss.message)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_file = out_dir / f"informe_import_{stamp}.md"
     out_file.write_text(build_report(result, issues), encoding="utf-8")
-    print(f"\nInforme final: {out_file}")
+    logger.info("\nInforme final: %s", out_file)
 
     return 0 if ok else 1
 

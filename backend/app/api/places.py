@@ -1,11 +1,10 @@
 """Endpoints de llocs."""
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.place import Place
+from app.repositories import PlaceRepository
 from app.schemas.place import PlaceOut
 
 router = APIRouter()
@@ -24,8 +23,4 @@ def list_places(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list:
-    stmt = select(Place)
-    if q:
-        stmt = stmt.where(Place.name.ilike(f"%{q}%"))
-    stmt = stmt.order_by(Place.name).limit(limit).offset(offset)
-    return db.scalars(stmt).all()
+    return PlaceRepository(db).list(q=q, limit=limit, offset=offset)

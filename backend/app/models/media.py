@@ -6,7 +6,7 @@ from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.event import Event
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.source import Source
 
 
-class Media(TimestampMixin, Base):
+class Media(UUIDMixin, TimestampMixin, Base):
     """Recurs multimediatic (imatge, audio...) vinculat a una entitat."""
 
     __tablename__ = "media"

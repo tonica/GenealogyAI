@@ -4,6 +4,7 @@ La importacio d'aquest mòdul registra tots els models a `Base.metadata`,
 necessari per als autogenerate d'Alembic i per al schema de test.
 """
 
+from app.models.audit_log import AuditLog
 from app.models.event import Event
 from app.models.family import Family
 from app.models.media import Media
@@ -14,6 +15,7 @@ from app.models.source import Source
 from app.models.suggestion import Suggestion
 
 __all__ = [
+    "AuditLog",
     "Event",
     "Family",
     "Media",

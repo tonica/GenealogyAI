@@ -6,7 +6,7 @@ from sqlalchemy import Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.event import Event
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.models.suggestion import Suggestion
 
 
-class Person(TimestampMixin, Base):
+class Person(UUIDMixin, TimestampMixin, Base):
     """Individu d'un arbre genealogic."""
 
     __tablename__ = "persons"
@@ -38,6 +38,25 @@ class Person(TimestampMixin, Base):
     birth_date: Mapped[Optional[str]] = mapped_column(String(100))
     death_date: Mapped[Optional[str]] = mapped_column(String(100))
     notes: Mapped[Optional[str]] = mapped_column(Text)
+
+    # --- Camps de cerca precalculats (veure app.services.search) ---
+    search_name: Mapped[Optional[str]] = mapped_column(
+        String(511),
+        index=True,
+        comment="Concatenacio nom + cognoms per a la cerca full-text",
+    )
+    slug: Mapped[Optional[str]] = mapped_column(
+        String(120), index=True, comment="Slug url-friendly de la persona"
+    )
+    soundex: Mapped[Optional[str]] = mapped_column(
+        String(4),
+        index=True,
+        comment="Codigo fonetico Soundex del cognom (preparat; no usat encara)",
+    )
+    metaphone: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        comment="Codigo fonetico metaphone (preparat; integracio futura)",
+    )
 
     # --- Relacions ---
     events: Mapped[list[Event]] = relationship(

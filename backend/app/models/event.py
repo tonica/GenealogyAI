@@ -6,7 +6,7 @@ from sqlalchemy import ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.family import Family
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.models.source import Source
 
 
-class Event(TimestampMixin, Base):
+class Event(UUIDMixin, TimestampMixin, Base):
     """Esdeveniment vital associat a una persona, familia o lloc."""
 
     __tablename__ = "events"

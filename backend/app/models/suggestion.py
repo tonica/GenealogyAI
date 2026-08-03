@@ -6,13 +6,13 @@ from sqlalchemy import Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.person import Person
 
 
-class Suggestion(TimestampMixin, Base):
+class Suggestion(UUIDMixin, TimestampMixin, Base):
     """Sugerencia (humana o generada per IA) per avançar en la recerca."""
 
     __tablename__ = "suggestions"

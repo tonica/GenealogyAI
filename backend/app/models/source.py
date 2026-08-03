@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 from app.models.associations import event_sources, person_sources
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.event import Event
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.models.person import Person
 
 
-class Source(TimestampMixin, Base):
+class Source(UUIDMixin, TimestampMixin, Base):
     """Font o cita genealogica que avala persons i esdeveniments."""
 
     __tablename__ = "sources"

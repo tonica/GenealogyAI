@@ -6,7 +6,7 @@ from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.mixins import TimestampMixin
+from app.models.mixins import TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.event import Event
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.person import Person
 
 
-class Family(TimestampMixin, Base):
+class Family(UUIDMixin, TimestampMixin, Base):
     """Unit familiar (parella + fills)."""
 
     __tablename__ = "families"

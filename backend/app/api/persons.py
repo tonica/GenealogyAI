@@ -1,13 +1,10 @@
 """Endpoints de persones."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.event import Event
-from app.models.parent_child import ParentChild
-from app.models.person import Person
+from app.repositories import PersonRepository
 from app.schemas.person import PersonDetail, PersonOut
 from app.services.serializers import person_detail, person_out
 
@@ -30,16 +27,7 @@ def list_persons(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    stmt = select(Person)
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(
-            or_(Person.given_name.ilike(like), Person.surname.ilike(like))
-        )
-    if sex:
-        stmt = stmt.where(Person.sex == sex)
-    stmt = stmt.order_by(Person.surname, Person.given_name).limit(limit).offset(offset)
-    rows = db.scalars(stmt).all()
+    rows = PersonRepository(db).search(q=q, sex=sex, limit=limit, offset=offset)
     return [person_out(p) for p in rows]
 
 
@@ -54,17 +42,7 @@ def get_person(
     person_id: int,
     db: Session = Depends(get_db),
 ) -> dict:
-    stmt = (
-        select(Person)
-        .where(Person.id == person_id)
-        .options(
-            selectinload(Person.events).selectinload(Event.place),
-            selectinload(Person.families_as_father),
-            selectinload(Person.families_as_mother),
-            selectinload(Person.child_links).selectinload(ParentChild.family),
-        )
-    )
-    person = db.scalar(stmt)
+    person = PersonRepository(db).get_with_detail(person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Persona no trobada")
     return person_detail(person)

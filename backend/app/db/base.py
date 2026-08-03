@@ -2,6 +2,7 @@
 
 from app.db.session import Base
 from app.models import (  # noqa: F401 (re-export: registra els models)
+    AuditLog,
     Event,
     Family,
     Media,
@@ -14,6 +15,7 @@ from app.models import (  # noqa: F401 (re-export: registra els models)
 
 __all__ = [
     "Base",
+    "AuditLog",
     "Person",
     "Family",
     "ParentChild",
