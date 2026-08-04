@@ -16,7 +16,6 @@ from app.application.services.quality import (
     DuplicatesUseCase,
     PersonQualityUseCase,
     QualityReportUseCase,
-    ResearchTasksUseCase,
     StatisticsUseCase,
 )
 from app.application.unit_of_work import UnitOfWork
@@ -182,8 +181,7 @@ def research_tasks(
     limit: int = Query(default=200, ge=1, le=2000),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    tasks = ResearchTasksUseCase(UnitOfWork(db)).execute()
-    return [t.to_dict() for t in tasks[:limit]]
+    return _service(db).research_tasks(limit=limit)
 
 
 # --------------------------------------------------------------------------- #

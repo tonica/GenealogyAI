@@ -93,6 +93,34 @@ export function PersonPage() {
             </Card>
           )}
 
+          <Card title="Fonts" subtitle={`${data.sources.length} font(s)`}>
+            {data.sources.length === 0 ? (
+              <EmptyState title="Cap font associada" />
+            ) : (
+              <ul className="space-y-3 text-sm">
+                {data.sources.map((source) => (
+                  <li key={source.id ?? source.xref ?? source.title}>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">
+                      {source.title}
+                    </p>
+                    {(source.author || source.publication) && (
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        {[source.author, source.publication]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    )}
+                    {source.citation && (
+                      <p className="mt-0.5 text-xs italic text-slate-400">
+                        {source.citation}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
           {quality && (
             <Card title="Factors de qualitat" subtitle={`Puntuació ${formatPercent(quality.score)}`}>
               <ul className="space-y-2 text-sm">

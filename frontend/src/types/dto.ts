@@ -77,6 +77,18 @@ export interface ResearchTask {
   kind: string
   hypothesis: string | null
   related_person_ids: number[]
+  status: 'open' | 'in_progress' | 'done'
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface Source {
+  id: number | null
+  xref: string | null
+  title: string
+  author: string | null
+  publication: string | null
+  url: string | null
+  citation: string | null
 }
 
 export interface PersonDetails extends PersonSummary {
@@ -91,6 +103,7 @@ export interface PersonDetails extends PersonSummary {
   quality_detail: PersonQuality | null
   duplicates: DuplicateCandidate[]
   tasks: ResearchTask[]
+  sources: Source[]
 }
 
 export interface Family {

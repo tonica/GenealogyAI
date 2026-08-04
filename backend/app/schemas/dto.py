@@ -104,6 +104,22 @@ class ResearchTaskDTO(BaseModel):
     kind: str
     hypothesis: str | None = None
     related_person_ids: list[int] = Field(default_factory=list)
+    status: str = Field(default="open", description="Estat: open | in_progress | done")
+    priority: str = Field(
+        default="medium", description="Prioritat derivada: high | medium | low"
+    )
+
+
+class SourceDTO(BaseModel):
+    """Font o cita genealògica associada a una persona."""
+
+    id: int | None = None
+    xref: str | None = None
+    title: str
+    author: str | None = None
+    publication: str | None = None
+    url: str | None = None
+    citation: str | None = None
 
 
 class PersonDetailsDTO(PersonSummaryDTO):
@@ -120,6 +136,7 @@ class PersonDetailsDTO(PersonSummaryDTO):
     quality_detail: "PersonQualityDTO | None" = Field(default=None)
     duplicates: list[DuplicateCandidateDTO] = Field(default_factory=list)
     tasks: list[ResearchTaskDTO] = Field(default_factory=list)
+    sources: list[SourceDTO] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #

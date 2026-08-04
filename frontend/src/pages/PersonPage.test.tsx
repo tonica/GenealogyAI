@@ -110,6 +110,17 @@ const person = {
   },
   duplicates: [],
   tasks: [],
+  sources: [
+    {
+      id: 21,
+      xref: 'S1',
+      title: 'Registre civil de Barcelona',
+      author: 'Ajuntament de Barcelona',
+      publication: 'Arxiu Municipal',
+      url: null,
+      citation: 'p. 12',
+    },
+  ],
 }
 
 describe('PersonPage', () => {
@@ -153,6 +164,15 @@ describe('PersonPage', () => {
       expect(screen.getAllByText('Línia del temps').length).toBeGreaterThan(0)
     })
     expect(screen.getAllByText('Naixement').length).toBeGreaterThan(0)
+  })
+
+  it('mostra les fonts associades', async () => {
+    apiMock.person.mockResolvedValue(person)
+    renderPageWithRoutes(<PersonPage />, '/persons/:personId', '/persons/1')
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Registre civil de Barcelona').length).toBeGreaterThan(0)
+    })
   })
 
   it('mostra l\'estat de càrrega', () => {

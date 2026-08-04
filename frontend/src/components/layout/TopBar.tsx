@@ -1,6 +1,6 @@
 import { Bars3Icon, SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/utils/cn'
-import type { Theme } from '@/hooks/use-theme'
+import type { Theme } from '@/theme/use-theme'
 
 interface TopBarProps {
   onOpenSidebar: () => void

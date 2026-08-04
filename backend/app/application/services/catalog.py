@@ -219,6 +219,7 @@ class CatalogService:
             "quality_detail": self._quality_detail(person, events_by_person),
             "duplicates": [c.to_dict() for c in dupes],
             "tasks": [t.to_dict() for t in tasks],
+            "sources": self._sources_for_person(person.id or 0),
         }
 
     def _quality_score(
@@ -335,6 +336,31 @@ class CatalogService:
         }
 
     # ------------------------------------------------------------------ #
+    # Tasques de recerca
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _task_priority(kind: str | None) -> str:
+        """Prioritat derivada del tipus de tasca (mai modifica el domini)."""
+        high = {"duplicate", "death", "error"}
+        low = {"parents", "place", "toponym"}
+        k = (kind or "").lower()
+        if k in high:
+            return "high"
+        if k in low:
+            return "low"
+        return "medium"
+
+    def research_tasks(self, limit: int = 200) -> list[dict]:
+        tasks = ResearchTasksUseCase(self.uow).execute()
+        out: list[dict] = []
+        for t in tasks[:limit]:
+            item = t.to_dict()
+            item["status"] = "open"
+            item["priority"] = self._task_priority(t.kind)
+            out.append(item)
+        return out
+
+    # ------------------------------------------------------------------ #
     # Consultes read-only a la base (sense tocar repositoris)
     # ------------------------------------------------------------------ #
     def _count(self, model_name: str) -> int:
@@ -352,6 +378,39 @@ class CatalogService:
         }[model_name]
         session = self.uow.persons.session
         return int(session.scalar(select(func.count(table.id))) or 0)
+
+    def _sources_for_person(self, person_id: int) -> list[dict]:
+        """Fonts associades a una persona via `person_sources` (read-only)."""
+        from app.models import Source
+        from app.models.associations import person_sources
+
+        session = self.uow.persons.session
+        rows = session.execute(
+            select(
+                Source.id,
+                Source.xref,
+                Source.title,
+                Source.author,
+                Source.publication,
+                Source.url,
+                Source.citation,
+            )
+            .join(person_sources, person_sources.c.source_id == Source.id)
+            .where(person_sources.c.person_id == person_id)
+            .order_by(Source.title)
+        ).all()
+        return [
+            {
+                "id": row.id,
+                "xref": row.xref,
+                "title": row.title,
+                "author": row.author,
+                "publication": row.publication,
+                "url": row.url,
+                "citation": row.citation,
+            }
+            for row in rows
+        ]
 
     def _last_import(self) -> str | None:
         from app.models import Person

@@ -14,6 +14,7 @@ import {
 import { useStatistics } from '@/hooks/queries'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Table } from '@/components/ui/Table'
 import { Loading } from '@/components/ui/Loading'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatNumber } from '@/utils/format'
@@ -152,6 +153,38 @@ export function StatisticsPage() {
           ))}
         </div>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Llocs més freqüents" subtitle="Top 15 llocs">
+          <Table
+            columns={[
+              { key: 'pos', header: '#' },
+              { key: 'name', header: 'Lloc' },
+              { key: 'count', header: 'Ocurrències' },
+            ]}
+            rows={(data.top_places ?? []).slice(0, 15).map((p, index) => [
+              <span key="pos" className="text-slate-400">{index + 1}</span>,
+              <span key="name" className="font-medium text-slate-900 dark:text-slate-100">{p.name}</span>,
+              <span key="count">{formatNumber(p.count)}</span>,
+            ])}
+          />
+        </Card>
+
+        <Card title="Cognoms més freqüents" subtitle="Top 15 cognoms">
+          <Table
+            columns={[
+              { key: 'pos', header: '#' },
+              { key: 'name', header: 'Cognom' },
+              { key: 'count', header: 'Persones' },
+            ]}
+            rows={(data.top_surnames ?? []).slice(0, 15).map((s, index) => [
+              <span key="pos" className="text-slate-400">{index + 1}</span>,
+              <span key="name" className="font-medium text-slate-900 dark:text-slate-100">{s.surname}</span>,
+              <span key="count">{formatNumber(s.count)}</span>,
+            ])}
+          />
+        </Card>
+      </div>
     </div>
   )
 }

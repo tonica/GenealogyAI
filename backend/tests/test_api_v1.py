@@ -21,6 +21,8 @@ GED = """0 HEAD
 1 BIRT
 2 DATE 10 FEB 1890
 2 PLAC Barcelona
+1 SOUR @S1@
+2 PAGE p. 12
 0 @I2@ INDI
 1 NAME John /Garcia/
 1 SEX M
@@ -36,6 +38,10 @@ GED = """0 HEAD
 1 HUSB @I1@
 1 WIFE @I3@
 1 CHIL @I2@
+0 @S1@ SOUR
+1 TITL Registre civil de Barcelona
+1 AUTH Ajuntament de Barcelona
+1 PUBL Arxiu Municipal
 0 TRLR
 """
 
@@ -135,6 +141,38 @@ def test_v1_person_detail(client):
     assert "quality_detail" in body
     assert "duplicates" in body
     assert "tasks" in body
+    assert "sources" in body
+
+
+def test_v1_person_detail_sources(client):
+    _import(client)
+    persons = client.get("/api/v1/persons").json()
+    pid = next(p["id"] for p in persons if p["xref"] == "I1")
+    r = client.get(f"/api/v1/persons/{pid}")
+    assert r.status_code == 200
+    sources = r.json()["sources"]
+    assert len(sources) == 1
+    src = sources[0]
+    assert set(src.keys()) == {
+        "id",
+        "xref",
+        "title",
+        "author",
+        "publication",
+        "url",
+        "citation",
+    }
+    assert src["title"] == "Registre civil de Barcelona"
+    assert src["author"] == "Ajuntament de Barcelona"
+
+
+def test_v1_person_detail_sources_empty(client):
+    _import(client)
+    persons = client.get("/api/v1/persons").json()
+    pid = next(p["id"] for p in persons if p["xref"] == "I3")
+    r = client.get(f"/api/v1/persons/{pid}")
+    assert r.status_code == 200
+    assert r.json()["sources"] == []
 
 
 def test_v1_person_detail_not_found(client):
@@ -228,10 +266,21 @@ def test_v1_research_tasks(client):
     tasks = r.json()
     assert isinstance(tasks, list)
     assert all(
-        {"person_id", "xref", "objective", "kind", "hypothesis", "related_person_ids"}
+        {
+            "person_id",
+            "xref",
+            "objective",
+            "kind",
+            "hypothesis",
+            "related_person_ids",
+            "status",
+            "priority",
+        }
         <= set(t.keys())
         for t in tasks
     )
+    assert all(t["status"] == "open" for t in tasks)
+    assert all(t["priority"] in {"high", "medium", "low"} for t in tasks)
 
 
 def test_v1_dashboard(client):
