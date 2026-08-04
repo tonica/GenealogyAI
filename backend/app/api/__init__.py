@@ -10,6 +10,7 @@ from app.api import (
     quality,
     routes,
     trees,
+    v1,
 )
 
 api_router = APIRouter()
@@ -20,3 +21,4 @@ api_router.include_router(places.router)
 api_router.include_router(trees.router)
 api_router.include_router(import_.router)
 api_router.include_router(quality.router)
+api_router.include_router(v1.router, prefix="/v1")

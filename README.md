@@ -12,8 +12,11 @@ motores de busqueda genealogica en fases posteriores.
 > independiente de la persistencia con entities, value objects y services),
 > **Data Quality Engine** (informe de calidad, deteccion de duplicados por
 > reglas, score de calidad por factores, estadisticas avanzadas, sugerencias de
-> investigacion) y **237 tests** con cobertura del 94%. El frontend React se
-> implementara en una fase posterior.
+> investigacion) y **251 tests** con cobertura del 94%. **Frontend React (Vite
+> + TypeScript + Tailwind)** consumidor del contrato `/api/v1` (DTOs), con
+> dashboard, busqueda, personas, familias, estadisticas, calidad, duplicados y
+> tareas de investigacion, con **20 tests** propios y desplegable via
+> docker-compose.
 
 ---
 
@@ -102,6 +105,25 @@ los motores para los endpoints.
 | GET | `/api/statistics` | Estadísticas agregadas del conjunto. |
 | GET | `/api/research/tasks?limit=N` | Tareas de investigación sugeridas. |
 
+### Contrato de API v1 (Sprint 2)
+
+Contrato público de DTOs consumido por el frontend, montado bajo `/api/v1` sin
+tocar los routers de `/api`. Delegada en `CatalogService` + casos de uso de la
+capa de aplicación; nunca devuelve objetos ORM.
+
+| Método | Ruta | Descripción |
+| ------ | ---- | ----------- |
+| GET | `/api/v1/persons?q=&surname=&given_name=&sex=&place=&birth_year=` | Búsqueda paginada de personas (DTO resumen). |
+| GET | `/api/v1/persons/{id}` | Detalle de persona: relaciones, línea de tiempo, calidad, duplicados, tareas. |
+| GET | `/api/v1/families?limit=&offset=` | Lista de familias. |
+| GET | `/api/v1/families/{id}` | Detalle de una familia. |
+| GET | `/api/v1/statistics` | Estadísticas agregadas. |
+| GET | `/api/v1/quality/report` | Informe completo de calidad. |
+| GET | `/api/v1/quality/persons/{id}` | Calidad individual con factores. |
+| GET | `/api/v1/duplicates?limit=` | Personas duplicadas. |
+| GET | `/api/v1/research/tasks?limit=` | Tareas de investigación. |
+| GET | `/api/v1/dashboard` | Resumen para la página de inicio (personas, familias, eventos, lugares, fuentes, media, calidad, tareas, última importación). |
+
 ---
 
 ## Stack
@@ -112,9 +134,9 @@ los motores para los endpoints.
 | Datos    | SQLite (via SQLAlchemy)                       |
 | Schemas  | Pydantic v2 + pydantic-settings               |
 | Server   | uvicorn                                       |
-| Frontend | React (pendiente)                              |
+| Frontend | React 18 + TypeScript 5, Vite 6, Tailwind CSS, TanStack Query, React Hook Form, Zod, Recharts |
 | Infra    | Docker, docker-compose                         |
-| Calidad  | pytest, ruff, black                            |
+| Calidad  | pytest, ruff, black (backend) · vitest, testing-library (frontend) |
 
 ---
 
@@ -125,13 +147,16 @@ los motores para los endpoints.
 ## Uso rapido con Docker
 
 ```bash
-# Construye y arranca el backend
+# Construye y arranca backend + frontend
 docker compose up --build
 
 # La API queda disponible en:
 http://localhost:8000            # raiz
 http://localhost:8000/docs       # Swagger UI
 http://localhost:8000/api/health # comprobacion de salud
+
+# El frontend queda disponible en:
+http://localhost:5173            # SPA (nginx) -> proxya /api/ al backend
 ```
 
 Para lanzarlo en background:
@@ -142,7 +167,7 @@ docker compose logs -f backend
 ```
 
 La base de datos SQLite y los archivos GEDCOM viven en `./data/`, montada como
-volumen en el contenedor.
+volumen en el contenedor del backend.
 
 ## Desarrollo local (sin Docker)
 
@@ -162,6 +187,17 @@ alembic revision --autogenerate -m "crear modelos"
 alembic upgrade head
 ```
 
+### Frontend (desarrollo local)
+
+```bash
+cd frontend
+npm install
+npm run dev          # http://localhost:5173 (proxy /api -> http://localhost:8000)
+```
+
+Si el backend no corre en `localhost:8000`, se puede apuntar el proxy a otra
+URL con `VITE_API_TARGET` (ver `vite.config.ts`).
+
 ### Tests, formato y estilo
 
 ```bash
@@ -170,6 +206,11 @@ pytest
 pytest --cov=app            # cobertura (objetivo >= 90 %)
 ruff check app tests
 black --check app tests
+
+cd frontend
+npm test                    # vitest run
+npm run lint
+npm run build               # tsc -b + vite build
 ```
 
 ---
@@ -250,6 +291,18 @@ black --check app tests
     `client`, `test_session` y `sqlite_session` (SQLite en memoria) para los
     tests de logica, API, FTS, UUID y PRAGMAs.
 
+15. **Contrato de API v1** (`app/api/v1.py`)
+    Router independiente bajo `/api/v1` que expone DTOs estables para el
+    frontend (`schemas/dto.py`). Delega en `CatalogService` (capa de
+    aplicación) y los casos de uso existentes; nunca serializa objetos ORM.
+
+16. **Frontend en `frontend/`**
+    SPA React 18 + TypeScript + Vite + Tailwind. Capas: `api/` (cliente HTTP
+    + tipos), `hooks/` (TanStack Query), `pages/`, `components/ui` (design
+    system), `features/`. Usa React Router 6, React Hook Form + Zod y Recharts.
+    En Docker se sirve con nginx (multi-stage) y el proxy `/api/` apunta al
+    servicio `backend`.
+
 ---
 
 ## Hoja de ruta (fases futuras)
@@ -272,7 +325,12 @@ black --check app tests
   DuplicateDetector por reglas, QualityEngine, StatisticsEngine avanzado,
   resolvers de lugares/nombres, DataQualityReport, ResearchTaskGenerator y
   5 endpoints de calidad (237 tests, cobertura 94 %).
-- **Fase 4:** frontend React (Vite) consumidor de la API.
+- **Fase 4 (hecha — frontend React)**: SPA en Vite + TypeScript + Tailwind que
+  consume el contrato `/api/v1`. Dashboard, búsqueda por filtros, detalle de
+  persona (relaciones, línea de tiempo, calidad, duplicados, tareas), familias,
+  estadísticas (Recharts), informe de calidad, duplicados y tareas de
+  investigación. 251 tests de backend + 20 tests de frontend; desplegable con
+  docker-compose (nginx + proxy).
 - **Fase 5:** IA y motores de busqueda genealogica (usa FTS5 + fonetica).
 
 ## Licencia
